@@ -103,12 +103,18 @@ h1 {
 }
 
 .map-card,
+.radar-card,
 .scatter-card {
   grid-column: 1 / -1;
 }
 
 .radar-card {
-  min-height: 520px;
+  min-height: 600px;
+}
+
+.radar-card .chart-header {
+  padding-top: 22px;
+  padding-bottom: 18px;
 }
 
 .chart-header,
@@ -117,7 +123,7 @@ h1 {
   justify-content: space-between;
   gap: 16px;
   align-items: flex-start;
-  padding: 20px 22px 25px;
+  padding: 30px 22px 25px;
 }
 
 .section-title {
@@ -252,7 +258,9 @@ svg {
 }
 
 #radarSvg {
-  padding: 0 14px 14px;
+  display: block;
+  width: 100%;
+  padding: 0 18px 18px;
 }
 
 .legend-row {

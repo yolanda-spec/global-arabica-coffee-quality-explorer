@@ -1,7 +1,7 @@
 const DATA_URL = "df_arabica_viz_clean.csv";
 const WORLD_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
-const flavorFields = ["Aroma", "Flavor", "Aftertaste", "Acidity", "Body", "Balance", "Overall"];
+const flavorFields = ["Aroma", "Flavor", "Aftertaste", "Acidity", "Body", "Balance"];
 const countryCoords = {
   "Taiwan": [
     121.0,
@@ -495,17 +495,18 @@ function countryTooltip(d) {
 
 function updateRadar(data) {
   const svg = d3.select("#radarSvg");
-  const width = 560, height = 430;
+  const width = 980, height = 520;
   svg.selectAll("*").remove();
 
-  const cx = width / 2, cy = 220, radius = 145;
-  const angle = d3.scalePoint().domain(flavorFields).range([0, Math.PI * 2]);
+  const cx = 645, cy = 248, radius = 142;
+  const angleStep = (Math.PI * 2) / flavorFields.length;
   const color = countryColor;
 
   const brushedData = state.brushedIds.size ? data.filter(d => state.brushedIds.has(d.__id)) : [];
   const sourceData = brushedData.length ? brushedData : data;
 
   const globalAverage = Object.fromEntries(flavorFields.map(f => [f, d3.mean(data, d => d[f])]));
+  const globalOverall = d3.mean(data, d => d.Overall);
   const countryStats = aggregateFlavorByCountry(sourceData);
 
   let shown = [];
@@ -533,8 +534,89 @@ function updateRadar(data) {
     ? d3.scaleLinear().domain([rawMin, rawMax]).range([0, radius])
     : d3.scaleLinear().domain(diffDomain).range([0, radius]);
 
+  const overallBars = [
+    {label: "Global average", value: globalOverall, color: "#777", dashed: true},
+    ...shown.map(d => ({label: d.country, value: d.Overall, color: color(d.country), dashed: false}))
+  ];
+  const barArea = {x: 54, y: 122, width: 220, rowHeight: 30};
+  const overallScale = d3.scaleLinear().domain([6.5, 9.0]).range([0, barArea.width]);
+
+  const overallGroup = svg.append("g").attr("transform", `translate(${barArea.x}, ${barArea.y})`);
+  overallGroup.append("text")
+    .attr("x", 0)
+    .attr("y", -52)
+    .attr("fill", "#5f2e1d")
+    .attr("font-size", 13)
+    .attr("font-weight", 800)
+    .text("Overall");
+
+  overallGroup.append("text")
+    .attr("x", 0)
+    .attr("y", -32)
+    .attr("fill", "#776d62")
+    .attr("font-size", 11)
+    .text("Independent summary score");
+
+  overallGroup.selectAll(".overall-guide")
+    .data([6.5, 7.0, 7.5, 8.0, 8.5, 9.0])
+    .join("line")
+    .attr("x1", d => overallScale(d))
+    .attr("x2", d => overallScale(d))
+    .attr("y1", -6)
+    .attr("y2", overallBars.length * barArea.rowHeight - 6)
+    .attr("stroke", "#efe4d4")
+    .attr("stroke-width", 1);
+
+  overallGroup.selectAll(".overall-tick")
+    .data([6.5, 7.0, 7.5, 8.0, 8.5, 9.0])
+    .join("text")
+    .attr("class", "radar-ring-label")
+    .attr("x", d => overallScale(d))
+    .attr("y", -18)
+    .attr("text-anchor", "middle")
+    .text(d => d.toFixed(1));
+
+  const overallItem = overallGroup.selectAll(".overall-row")
+    .data(overallBars)
+    .join("g")
+    .attr("class", "overall-row")
+    .attr("transform", (d, i) => `translate(0, ${24 + i * barArea.rowHeight})`);
+
+  overallItem.append("text")
+    .attr("x", 0)
+    .attr("y", -8)
+    .attr("fill", "#5f5348")
+    .attr("font-size", 11)
+    .attr("font-weight", 700)
+    .text(d => d.label);
+
+  overallItem.append("line")
+    .attr("x1", 0)
+    .attr("x2", d => overallScale(d.value))
+    .attr("y1", 7)
+    .attr("y2", 7)
+    .attr("stroke", d => d.color)
+    .attr("stroke-width", 7)
+    .attr("stroke-linecap", "round")
+    .attr("stroke-dasharray", d => d.dashed ? "6 4" : null);
+
+  overallItem.append("circle")
+    .attr("cx", d => overallScale(d.value))
+    .attr("cy", 7)
+    .attr("r", 4)
+    .attr("fill", d => d.color)
+    .attr("stroke", "#fffdf8")
+    .attr("stroke-width", 1.5);
+
+  overallItem.append("text")
+    .attr("x", d => overallScale(d.value) + 10)
+    .attr("y", 11)
+    .attr("fill", "#5f5348")
+    .attr("font-size", 11)
+    .text(d => formatScore(d.value));
+
   const radialPoint = (field, value) => {
-    const a = angle(field) - Math.PI / 2;
+    const a = flavorFields.indexOf(field) * angleStep - Math.PI / 2;
     const rr = r(value);
     return [cx + Math.cos(a) * rr, cy + Math.sin(a) * rr];
   };
@@ -576,11 +658,11 @@ function updateRadar(data) {
     .join("text")
     .attr("class", "radar-axis-label")
     .attr("x", f => {
-      const a = angle(f) - Math.PI / 2;
+      const a = flavorFields.indexOf(f) * angleStep - Math.PI / 2;
       return cx + Math.cos(a) * (radius + 34);
     })
     .attr("y", f => {
-      const a = angle(f) - Math.PI / 2;
+      const a = flavorFields.indexOf(f) * angleStep - Math.PI / 2;
       return cy + Math.sin(a) * (radius + 34);
     })
     .attr("text-anchor", "middle")
@@ -633,15 +715,22 @@ function updateRadar(data) {
     .on("mousemove", moveTooltip)
     .on("mouseleave", hideTooltip);
 
-  const legend = svg.append("g").attr("transform", "translate(24, 385)");
   const legendData = [
     {name: "Global average", color: "#777", dashed: true},
     ...shown.map(d => ({name: d.country, color: color(d.country)}))
   ];
+  const legendColumns = 3;
+  const legendColumnWidth = 260;
+  const legendRowHeight = 24;
+  const legendRows = Math.ceil(legendData.length / legendColumns);
+  const legendWidth = legendColumns * legendColumnWidth;
+  const legendStartX = (width - legendWidth) / 2;
+  const legendStartY = 456;
+  const legend = svg.append("g").attr("transform", `translate(${legendStartX}, ${legendStartY})`);
   const legendItem = legend.selectAll("g")
     .data(legendData)
     .join("g")
-    .attr("transform", (d, i) => `translate(${i * 132},0)`)
+    .attr("transform", (d, i) => `translate(${(i % legendColumns) * legendColumnWidth},${Math.floor(i / legendColumns) * legendRowHeight})`)
     .style("cursor", d => d.name === "Global average" ? "default" : "pointer")
     .on("click", (event, d) => {
       if (d.name === "Global average") return;
@@ -664,7 +753,7 @@ function updateRadar(data) {
     .attr("y", 4)
     .attr("font-size", 11)
     .attr("fill", "#66594e")
-    .text(d => d.name.length > 18 ? d.name.slice(0, 17) + "…" : d.name);
+    .text(d => d.name);
 
   const status = brushedData.length
     ? `Radar uses brushed subset: ${brushedData.length} samples. Scale: ${radarMode === "raw" ? "6.5–9.0, not zero-based" : "difference from current global average"}.`
@@ -676,6 +765,7 @@ function aggregateFlavorByCountry(data) {
   return d3.rollups(data, values => {
     const result = {country: values[0].country, sampleCount: values.length};
     flavorFields.forEach(f => result[f] = d3.mean(values, d => d[f]));
+    result.Overall = d3.mean(values, d => d.Overall);
     return result;
   }, d => d.country).map(d => d[1]);
 }
