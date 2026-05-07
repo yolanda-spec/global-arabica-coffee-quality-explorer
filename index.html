@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Global Arabica Coffee Quality Explorer</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="hero">
+    <div>
+      <p class="eyebrow">Assignment 3 · Interactive Visualization</p>
+      <h1>Global Arabica Coffee Quality Explorer</h1>
+      <p class="subtitle">
+        Explore where high-scoring Arabica coffees come from, how their flavor profiles differ,
+        and how altitude and processing method relate to sample-level quality.
+      </p>
+    </div>
+    <div class="hero-note">
+      <strong>How to explore</strong>
+      <span>Select countries on the map → compare flavor radar → brush high-scoring altitude ranges.</span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="controls card">
+      <div class="section-title">
+        <h2>Global Filters</h2>
+        <button id="resetAll" class="small-btn">Reset</button>
+      </div>
+
+      <label class="control-label" for="mapMetric">Map color metric</label>
+      <select id="mapMetric">
+        <option value="avgScore">Average Score</option>
+        <option value="medianScore">Median Score</option>
+        <option value="maxScore">Max Score</option>
+        <option value="sampleCount">Sample Count</option>
+        <option value="veryGoodRate">% Very Good (≥85)</option>
+      </select>
+
+      <div class="control-block">
+        <div class="control-label">Processing method</div>
+        <div id="methodFilters" class="checkbox-list"></div>
+      </div>
+
+      <div class="control-block">
+        <div class="control-label">Harvest year</div>
+        <div id="yearFilters" class="checkbox-list compact"></div>
+      </div>
+
+      <label class="control-label" for="varietyFilter">Variety</label>
+      <select id="varietyFilter"></select>
+
+      <div class="control-block">
+        <div class="control-row">
+          <span class="control-label">Altitude range</span>
+          <span id="altitudeLabel" class="value-label"></span>
+        </div>
+        <input id="altitudeMin" type="range" />
+        <input id="altitudeMax" type="range" />
+      </div>
+
+      <div class="control-block">
+        <div class="control-row">
+          <label class="control-label" for="scoreThreshold">Minimum score</label>
+          <span id="scoreLabel" class="value-label"></span>
+        </div>
+        <input id="scoreThreshold" type="range" min="78" max="90" step="0.1" value="78" />
+      </div>
+
+      <label class="switch-row">
+        <input id="hideSmallSamples" type="checkbox" />
+        <span>Hide countries with n &lt; 5 on map</span>
+      </label>
+
+      <label class="switch-row">
+        <input id="showDataIssues" type="checkbox" checked />
+        <span>Show altitude quality warnings</span>
+      </label>
+
+      <div class="selected-box">
+        <div class="control-label">Selected countries</div>
+        <div id="selectedCountries" class="selected-list">None</div>
+      </div>
+    </aside>
+
+    <section class="dashboard">
+      <section class="card map-card">
+        <div class="chart-header">
+          <div>
+            <h2>View 1 · Global Coffee Origin Map</h2>
+            <p>Bubble color shows the selected metric. Bubble size shows sample count.</p>
+          </div>
+          <div class="chart-actions">
+            <button id="clearCountries" class="small-btn">Clear countries</button>
+            <button id="resetMapZoom" class="small-btn">Reset map zoom</button>
+          </div>
+        </div>
+        <div id="mapLegend" class="legend-row"></div>
+        <svg id="mapSvg" viewBox="0 0 980 470" role="img" aria-label="World map with coffee origin bubbles"></svg>
+      </section>
+
+      <section class="card radar-card">
+        <div class="chart-header">
+          <div>
+            <h2>View 2 · Flavor Radar Comparison</h2>
+            <p>Radar axes use a truncated scale to make small flavor differences visible.</p>
+          </div>
+          <div class="chart-actions">
+            <label class="mini-control">Radar mode
+              <select id="radarMode">
+                <option value="raw">Raw average</option>
+                <option value="diff">Difference from global average</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div id="radarStatus" class="status-line"></div>
+        <svg id="radarSvg" viewBox="0 0 560 430" role="img" aria-label="Radar chart comparing flavor profiles"></svg>
+      </section>
+
+      <section class="card scatter-card">
+        <div class="chart-header">
+          <div>
+            <h2>View 3 · Altitude vs Score Explorer</h2>
+            <p>Brush a region to inspect the selected samples across the map and radar chart.</p>
+          </div>
+          <div class="chart-actions">
+            <button id="clearBrush" class="small-btn">Clear brush</button>
+          </div>
+        </div>
+        <div id="scatterLegend" class="legend-row"></div>
+        <svg id="scatterSvg" viewBox="0 0 980 460" role="img" aria-label="Scatterplot of altitude versus total cup points"></svg>
+      </section>
+    </section>
+  </main>
+
+  <div id="tooltip" class="tooltip" aria-hidden="true"></div>
+
+  <footer>
+    Data: Coffee Quality Database, cleaned for interactive visualization. Static prototype using D3.js.
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
+  <script src="main.js"></script>
+</body>
+</html>
