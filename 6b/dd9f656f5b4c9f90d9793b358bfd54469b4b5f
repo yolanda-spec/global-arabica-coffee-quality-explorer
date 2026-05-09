@@ -1,0 +1,14 @@
+report.md
+  h_fc097306d7e6cf 1-368
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "6bdd9f656f5b4c9f90d9793b358bfd54469b4b5f",
+  "prompts": {},
+  "humans": {
+    "h_fc097306d7e6cf": {
+      "author": "aleph <gaoyiyi11@ruc.edu.cn>"
+    }
+  }
+}
