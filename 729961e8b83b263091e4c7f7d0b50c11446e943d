@@ -1,0 +1,30 @@
+README.md
+  ai_agent 22
+style.css
+  0488e220a9babe69 106,112-117,261-263
+  h_e2fa619c48e43b 126
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "729961e8b83b263091e4c7f7d0b50c11446e943d",
+  "prompts": {
+    "0488e220a9babe69": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e0270-db7b-7df1-aab4-399516289842",
+        "model": "gpt-5.4"
+      },
+      "human_author": "PieceSlow <pieceslow@outlook.com>",
+      "total_additions": 73,
+      "total_deletions": 65,
+      "accepted_lines": 12,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_e2fa619c48e43b": {
+      "author": "PieceSlow"
+    }
+  }
+}

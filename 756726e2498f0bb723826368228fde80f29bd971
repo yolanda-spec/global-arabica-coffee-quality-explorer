@@ -1,0 +1,14 @@
+style.css
+  h_e2fa619c48e43b 120
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "756726e2498f0bb723826368228fde80f29bd971",
+  "prompts": {},
+  "humans": {
+    "h_e2fa619c48e43b": {
+      "author": "PieceSlow"
+    }
+  }
+}
