@@ -284,6 +284,15 @@ svg {
   box-sizing: border-box;
 }
 
+.scatter-brush-summary {
+  background: #f5ede2;
+  color: var(--accent-dark);
+  border: 1px solid #e2d0bd;
+  border-radius: 8px;
+  padding: 2px 9px;
+  font-size: 12px;
+}
+
 .status-line {
   min-height: 20px;
   padding: 0 22px;

@@ -125,8 +125,10 @@ let rawData = [];
 let worldData = null;
 let mapZoomBehavior = null;
 let mapCurrentTransform = d3.zoomIdentity;
-let lastBrushSelection = null;
+let lastBrushDataSelection = null;   // brush 选区用数据坐标存储，而非像素坐标
 let suppressBrushUpdate = false;
+let scatterZoomTransform = d3.zoomIdentity;  // 散点图缩放状态（跨重渲染持久化）
+let isRestoringScatterZoom = false;          // 防止恢复缩放时触发无限递归
 
 const tooltip = d3.select("#tooltip");
 const formatScore = d3.format(".2f");
@@ -301,6 +303,11 @@ function buildControls() {
     mapCurrentTransform = d3.zoomIdentity;
     if (mapZoomBehavior) svg.transition().duration(500).call(mapZoomBehavior.transform, mapCurrentTransform);
   });
+
+  d3.select("#resetScatterZoom").on("click", () => {
+    scatterZoomTransform = d3.zoomIdentity;
+    updateScatter(getScatterFilteredData());
+  });
 }
 
 function resetAll() {
@@ -329,12 +336,14 @@ function resetAll() {
   d3.select("#altitudeMax").property("value", state.altitudeMax);
   d3.selectAll("#methodFilters input").property("checked", true);
   d3.selectAll("#yearFilters input").property("checked", true);
+  scatterZoomTransform = d3.zoomIdentity;
+  lastBrushDataSelection = null;
   updateAll();
 }
 
 function clearBrushOnly() {
   state.brushedIds.clear();
-  lastBrushSelection = null;
+  lastBrushDataSelection = null;
 }
 
 function getBaseFilteredData() {
@@ -843,31 +852,53 @@ function updateScatter(data) {
     return;
   }
 
-  const x = d3.scaleLinear()
+  // ── Clip path ─────────────────────────────────────────────────────────────
+  // 缩放时防止数据点、趋势线溢出绘图区域
+  svg.append("defs")
+    .append("clipPath").attr("id", "scatter-clip")
+    .append("rect").attr("x", 0).attr("y", 0)
+    .attr("width", innerW).attr("height", innerH);
+
+  // ── 比例尺 ────────────────────────────────────────────────────────────────
+  // 先建立基础比例尺，再叠加缩放变换
+  const xBase = d3.scaleLinear()
     .domain(d3.extent(clean, d => d.altitude)).nice()
     .range([0, innerW]);
-  const y = d3.scaleLinear()
-    .domain([Math.max(76, d3.min(clean, d => d.totalScore) - 0.5), Math.min(91, d3.max(clean, d => d.totalScore) + 0.5)]).nice()
+  const yBase = d3.scaleLinear()
+    .domain([
+      Math.max(76, d3.min(clean, d => d.totalScore) - 0.5),
+      Math.min(91, d3.max(clean, d => d.totalScore) + 0.5)
+    ]).nice()
     .range([innerH, 0]);
 
+  const x = scatterZoomTransform.rescaleX(xBase);
+  const y = scatterZoomTransform.rescaleY(yBase);
+  const xDomain = x.domain();
+
+  // ── 海拔分区背景 ──────────────────────────────────────────────────────────
+  // 只渲染与当前可见 x 域相交的分区，避免标签越界
   const altitudeBands = [
-    [0, 800, "below 800m"],
-    [800, 1200, "800–1200m"],
-    [1200, 1600, "1200–1600m"],
-    [1600, 2000, "1600–2000m"],
-    [2000, 2600, "above 2000m"]
+    [0,    800,  "below 800 m"],
+    [800,  1200, "800–1200 m"],
+    [1200, 1600, "1200–1600 m"],
+    [1600, 2000, "1600–2000 m"],
+    [2000, 2600, "above 2000 m"]
   ];
 
-  plot.selectAll(".alt-band")
-    .data(altitudeBands)
+  const clipped = plot.append("g").attr("clip-path", "url(#scatter-clip)");
+
+  clipped.selectAll(".alt-band")
+    .data(altitudeBands.filter(d => d[1] > xDomain[0] && d[0] < xDomain[1]))
     .join("rect")
-    .attr("x", d => x(Math.max(d[0], x.domain()[0])))
-    .attr("width", d => Math.max(0, x(Math.min(d[1], x.domain()[1])) - x(Math.max(d[0], x.domain()[0]))))
+    .attr("class", "alt-band")
+    .attr("x", d => x(Math.max(d[0], xDomain[0])))
+    .attr("width", d => Math.max(0, x(Math.min(d[1], xDomain[1])) - x(Math.max(d[0], xDomain[0]))))
     .attr("y", 0)
     .attr("height", innerH)
     .attr("fill", (d, i) => i % 2 ? "#fbf4ea" : "#f4ebdf")
     .attr("opacity", 0.55);
 
+  // ── 网格 + 坐标轴 ────────────────────────────────────────────────────────
   plot.append("g")
     .attr("class", "grid")
     .call(d3.axisLeft(y).ticks(6).tickSize(-innerW).tickFormat(""))
@@ -883,36 +914,52 @@ function updateScatter(data) {
     .call(d3.axisLeft(y).ticks(6));
 
   plot.append("text")
-    .attr("x", innerW / 2)
-    .attr("y", innerH + 42)
-    .attr("text-anchor", "middle")
-    .attr("fill", "#66594e")
-    .attr("font-size", 12)
+    .attr("x", innerW / 2).attr("y", innerH + 42)
+    .attr("text-anchor", "middle").attr("fill", "#66594e").attr("font-size", 12)
     .text("Altitude_final (meters)");
 
   plot.append("text")
     .attr("transform", "rotate(-90)")
-    .attr("x", -innerH / 2)
-    .attr("y", -45)
-    .attr("text-anchor", "middle")
-    .attr("fill", "#66594e")
-    .attr("font-size", 12)
+    .attr("x", -innerH / 2).attr("y", -45)
+    .attr("text-anchor", "middle").attr("fill", "#66594e").attr("font-size", 12)
     .text("Total Cup Points");
 
-  plot.selectAll(".band-label")
-    .data(altitudeBands.filter(d => x(d[0]) >= -50 && x(d[0]) <= innerW))
+  // 分区标签（在 clip 组内，只渲染可见分区）
+  clipped.selectAll(".band-label")
+    .data(altitudeBands.filter(d => d[1] > xDomain[0] && d[0] < xDomain[1]))
     .join("text")
-    .attr("x", d => x(Math.max(d[0], x.domain()[0])) + 8)
+    .attr("class", "band-label")
+    .attr("x", d => Math.max(4, x(Math.max(d[0], xDomain[0]))) + 6)
     .attr("y", 16)
     .attr("fill", "#9b8e80")
     .attr("font-size", 10)
     .text(d => d[2]);
 
+  // ── 趋势线（线性回归，仅作视觉参考）────────────────────────────────────
+  const meanAlt   = d3.mean(clean, d => d.altitude);
+  const meanScore = d3.mean(clean, d => d.totalScore);
+  const ssXX = d3.sum(clean, d => (d.altitude - meanAlt) ** 2);
+  const ssXY = d3.sum(clean, d => (d.altitude - meanAlt) * (d.totalScore - meanScore));
+  if (ssXX > 0) {
+    const slope = ssXY / ssXX;
+    const intercept = meanScore - slope * meanAlt;
+    const trendPath = d3.line().x(d => x(d[0])).y(d => y(d[1]));
+    clipped.append("path")
+      .datum([[xDomain[0], slope * xDomain[0] + intercept],
+              [xDomain[1], slope * xDomain[1] + intercept]])
+      .attr("d", trendPath)
+      .attr("fill", "none")
+      .attr("stroke", "#b08060")
+      .attr("stroke-width", 1.5)
+      .attr("stroke-dasharray", "6 4")
+      .attr("opacity", 0.5);
+  }
+
+  // ── 数据点 ────────────────────────────────────────────────────────────────
   const selectedCountries = state.selectedCountries;
   const brushedActive = state.brushedIds.size > 0;
 
-  plot.append("g")
-    .selectAll(".scatter-point")
+  clipped.selectAll(".scatter-point")
     .data(clean, d => d.__id)
     .join("circle")
     .attr("class", "scatter-point")
@@ -932,10 +979,16 @@ function updateScatter(data) {
       if (selectedCountries.size && !selectedCountries.has(d.country)) return 0.22;
       return 0.82;
     })
-    .on("mouseenter", (event, d) => showTooltip(event, sampleTooltip(d)))
+    .on("mouseenter", (event, d) => {
+      // 将悬停点提升到最上层，防止被相邻点遮挡
+      d3.select(event.currentTarget).raise();
+      showTooltip(event, sampleTooltip(d));
+    })
     .on("mousemove", moveTooltip)
     .on("mouseleave", hideTooltip);
 
+  // ── Brush 交互 ────────────────────────────────────────────────────────────
+  // 选区用数据坐标存储，确保缩放或比例尺变化后框选仍然精准
   const brush = d3.brush()
     .extent([[0, 0], [innerW, innerH]])
     .on("end", event => {
@@ -943,34 +996,92 @@ function updateScatter(data) {
       const selection = event.selection;
       if (!selection) {
         state.brushedIds.clear();
-        lastBrushSelection = null;
+        lastBrushDataSelection = null;
         updateAll();
         return;
       }
-      const [[x0, y0], [x1, y1]] = selection;
+      const [[px0, py0], [px1, py1]] = selection;
+      // 像素 → 数据坐标
+      lastBrushDataSelection = {
+        altMin:   x.invert(px0),
+        altMax:   x.invert(px1),
+        scoreMin: y.invert(py1),  // y 轴反转：高像素 = 低分数
+        scoreMax: y.invert(py0),
+      };
       const ids = clean
         .filter(d => {
           const px = x(d.altitude);
           const py = y(d.totalScore);
-          return px >= x0 && px <= x1 && py >= y0 && py <= y1;
+          return px >= px0 && px <= px1 && py >= py0 && py <= py1;
         })
         .map(d => d.__id);
       state.brushedIds = new Set(ids);
-      lastBrushSelection = selection;
       updateAll();
     });
 
   const brushG = plot.append("g").attr("class", "brush").call(brush);
-  if (lastBrushSelection) {
-    suppressBrushUpdate = true;
-    brushG.call(brush.move, lastBrushSelection);
-    suppressBrushUpdate = false;
+
+  // 从数据坐标恢复 brush 框选
+  if (lastBrushDataSelection) {
+    const { altMin, altMax, scoreMin, scoreMax } = lastBrushDataSelection;
+    const px0 = x(altMin),  px1 = x(altMax);
+    const py0 = y(scoreMax), py1 = y(scoreMin); // y 轴反转
+    if (px1 > 0 && px0 < innerW && py1 > 0 && py0 < innerH) {
+      suppressBrushUpdate = true;
+      brushG.call(brush.move, [
+        [Math.max(0, px0),   Math.max(0, py0)],
+        [Math.min(innerW, px1), Math.min(innerH, py1)]
+      ]);
+      suppressBrushUpdate = false;
+    }
   }
 
+  // ── 缩放（仅滚轮）────────────────────────────────────────────────────────
+  // 滚轮缩放，拖拽保留给 brush，两者互不冲突
+  const scatterZoom = d3.zoom()
+    .scaleExtent([0.5, 10])
+    .filter(event => event.type === "wheel")
+    .on("zoom", event => {
+      if (isRestoringScatterZoom) return;
+      scatterZoomTransform = event.transform;
+      updateScatter(getScatterFilteredData());
+    });
+
+  svg.call(scatterZoom).on("dblclick.zoom", null);
+
+  // 静默恢复缩放状态，不触发重渲染
+  isRestoringScatterZoom = true;
+  svg.call(scatterZoom.transform, scatterZoomTransform);
+  isRestoringScatterZoom = false;
+
+  // ── 图例 + brush 统计摘要 ─────────────────────────────────────────────────
   const methods = Array.from(new Set(clean.map(d => d.method))).sort();
-  d3.select("#scatterLegend").html(methods.map(m => `
-    <span class="legend-item"><span class="legend-swatch" style="background:${methodColor(m)}"></span>${escapeHtml(m)}</span>
-  `).join("") + (state.brushedIds.size ? `<span class="legend-item"><strong>${state.brushedIds.size}</strong> brushed samples</span>` : ""));
+  let legendHtml = methods.map(m =>
+    `<span class="legend-item"><span class="legend-swatch" style="background:${methodColor(m)}"></span>${escapeHtml(m)}</span>`
+  ).join("");
+
+  // brush 激活时，显示简短统计，让用户无需等待雷达图即可看到关键信息
+  if (state.brushedIds.size) {
+    const brushedSubset = clean.filter(d => state.brushedIds.has(d.__id));
+    const avgSc = d3.mean(brushedSubset, d => d.totalScore);
+    const topMethPairs = d3.rollups(brushedSubset, v => v.length, d => d.method)
+      .sort((a, b) => d3.descending(a[1], b[1]));
+    const topMeth = topMethPairs.length ? topMethPairs[0][0] : "N/A";
+    legendHtml += `<span class="legend-item scatter-brush-summary">`
+      + `<strong>${state.brushedIds.size}</strong> selected`
+      + ` &nbsp;·&nbsp; avg: <strong>${formatScore(avgSc)}</strong>`
+      + ` &nbsp;·&nbsp; top method: <strong>${escapeHtml(topMeth)}</strong>`
+      + `</span>`;
+  }
+  if (state.showDataIssues) {
+    legendHtml += `<span class="legend-item">`
+      + `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;`
+      + `border:1.5px dashed #b61d1d;vertical-align:middle;margin-right:2px;"></span>`
+      + `altitude warning</span>`;
+  }
+  legendHtml += `<span class="legend-item" style="color:#b08060;">&#8212;&#8212;&nbsp;visual trend</span>`;
+
+  d3.select("#scatterLegend").html(legendHtml);
 }
 
 function hasAltitudeIssue(d) {
@@ -978,7 +1089,7 @@ function hasAltitudeIssue(d) {
 }
 
 function sampleTooltip(d) {
-  const flavor = flavorFields.map(f => `${f}: ${formatScore(d[f])}`).join(" · ");
+  const flavor = flavorFields.map(f => `${f}: ${Number.isFinite(d[f]) ? formatScore(d[f]) : "N/A"}`).join(" · ");
   const issue = hasAltitudeIssue(d)
     ? `<br/><span style="color:#ffb4a8">Altitude warning: ${d.altitudeLow ? "low " : ""}${d.altitudeHigh ? "high " : ""}${d.altitudeSuspectFeet ? "suspect feet " : ""}</span><br/>Original altitude: ${escapeHtml(d.altitudeRaw || "N/A")}`
     : "";
