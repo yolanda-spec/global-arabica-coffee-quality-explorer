@@ -253,14 +253,9 @@ svg {
 }
 
 #mapSvg,
+#radarSvg,
 #scatterSvg {
   padding: 0 14px 20px;
-}
-
-#radarSvg {
-  display: block;
-  width: 100%;
-  padding: 0 18px 18px;
 }
 
 .legend-row {

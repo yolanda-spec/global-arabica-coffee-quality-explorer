@@ -489,7 +489,7 @@ function updateMapLegend(values, metric, color, stats) {
   const label = metricLabels[metric];
   const min = d3.min(values) ?? 0, max = d3.max(values) ?? 1;
   const html = `
-    <span class="legend-item"><span class="legend-swatch" style="background:${color(min)}"></span>Low ${label}</span>
+    <span class="legend-item"><span class="legend-swatch" style="background:${color(min)};border-color:#8f7a64;border-width:1.5px"></span>Low ${label}</span>
     <span class="legend-item"><span class="legend-swatch" style="background:${color(max)}"></span>High ${label}</span>
     <span class="legend-item">Bubble size = sample count</span>
     <span class="legend-item">${stats.length} visible countries</span>
@@ -535,10 +535,10 @@ function countryTooltip(d) {
 
 function updateRadar(data) {
   const svg = d3.select("#radarSvg");
-  const width = 980, height = 520;
+  const width = 980, height = 470;
   svg.selectAll("*").remove();
 
-  const cx = 645, cy = 248, radius = 142;
+  const cx = 645, cy = 224, radius = 130;
   const angleStep = (Math.PI * 2) / flavorFields.length;
   const color = countryColor;
 
@@ -765,7 +765,7 @@ function updateRadar(data) {
   const legendRows = Math.ceil(legendData.length / legendColumns);
   const legendWidth = legendColumns * legendColumnWidth;
   const legendStartX = (width - legendWidth) / 2;
-  const legendStartY = 456;
+  const legendStartY = 412;
   const legend = svg.append("g").attr("transform", `translate(${legendStartX}, ${legendStartY})`);
   const legendItem = legend.selectAll("g")
     .data(legendData)
@@ -823,7 +823,7 @@ function radarTooltip(d) {
 
 function updateScatter(data) {
   const svg = d3.select("#scatterSvg");
-  const width = 980, height = 460;
+  const width = 980, height = 470;
   const margin = {top: 22, right: 26, bottom: 58, left: 68};
   const innerW = width - margin.left - margin.right;
   const innerH = height - margin.top - margin.bottom;
