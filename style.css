@@ -285,6 +285,8 @@ svg {
   height: 10px;
   border-radius: 50%;
   display: inline-block;
+  border: 1px solid rgba(42, 33, 24, 0.22);
+  box-sizing: border-box;
 }
 
 .status-line {

@@ -93,6 +93,11 @@ const countryCoords = {
   ]
 };
 
+const countryAliases = {
+  "United Republic Of": "Tanzania, United Republic Of",
+  " United Republic Of": "Tanzania, United Republic Of"
+};
+
 const metricLabels = {
   avgScore: "Average Score",
   medianScore: "Median Score",
@@ -119,6 +124,7 @@ const state = {
 let rawData = [];
 let worldData = null;
 let mapZoomBehavior = null;
+let mapCurrentTransform = d3.zoomIdentity;
 let lastBrushSelection = null;
 let suppressBrushUpdate = false;
 
@@ -277,7 +283,7 @@ function buildControls() {
 
   d3.select("#radarMode").on("change", function() {
     state.radarMode = this.value;
-    updateRadar(getFilteredData());
+    updateRadar(getBaseFilteredData());
   });
 
   d3.select("#clearCountries").on("click", () => {
@@ -292,7 +298,8 @@ function buildControls() {
   });
   d3.select("#resetMapZoom").on("click", () => {
     const svg = d3.select("#mapSvg");
-    if (mapZoomBehavior) svg.transition().duration(500).call(mapZoomBehavior.transform, d3.zoomIdentity);
+    mapCurrentTransform = d3.zoomIdentity;
+    if (mapZoomBehavior) svg.transition().duration(500).call(mapZoomBehavior.transform, mapCurrentTransform);
   });
 }
 
@@ -330,27 +337,34 @@ function clearBrushOnly() {
   lastBrushSelection = null;
 }
 
-function getFilteredData() {
+function getBaseFilteredData() {
   return rawData.filter(d => {
     if (!state.selectedMethods.has(d.method)) return false;
     if (!state.selectedYears.has(String(d.year))) return false;
     if (state.selectedVariety !== "All" && d.variety !== state.selectedVariety) return false;
-    if (!Number.isFinite(d.altitude)) return false;
-    if (d.altitude < state.altitudeMin || d.altitude > state.altitudeMax) return false;
     if (d.totalScore < state.scoreThreshold) return false;
     return true;
   });
 }
 
+function getScatterFilteredData(baseData = getBaseFilteredData()) {
+  return baseData.filter(d => {
+    if (!Number.isFinite(d.altitude)) return false;
+    if (d.altitude < state.altitudeMin || d.altitude > state.altitudeMax) return false;
+    return true;
+  });
+}
+
 function updateAll() {
-  const data = getFilteredData();
+  const baseData = getBaseFilteredData();
+  const scatterData = getScatterFilteredData(baseData);
   d3.select("#altitudeLabel").text(`${formatInt(state.altitudeMin)}–${formatInt(state.altitudeMax)} m`);
   d3.select("#scoreLabel").text(`≥ ${formatOne(state.scoreThreshold)}`);
   d3.select("#selectedCountries").text(state.selectedCountries.size ? Array.from(state.selectedCountries).join(", ") : "None");
 
-  updateMap(data);
-  updateRadar(data);
-  updateScatter(data);
+  updateMap(baseData);
+  updateRadar(baseData);
+  updateScatter(scatterData);
 }
 
 function aggregateCountries(data) {
@@ -374,11 +388,13 @@ function aggregateCountries(data) {
   ).map(d => d[1]);
 
   grouped.forEach(d => {
-    const coords = countryCoords[d.country];
+    const normalizedCountry = countryAliases[d.country] || d.country;
+    const coords = countryCoords[normalizedCountry];
+    d.displayCountry = normalizedCountry;
     d.lon = coords ? coords[0] : null;
     d.lat = coords ? coords[1] : null;
   });
-  return grouped.filter(d => d.lon !== null && d.lat !== null);
+  return grouped;
 }
 
 function updateMap(data) {
@@ -404,7 +420,9 @@ function updateMap(data) {
     .attr("d", path);
 
   const stats = aggregateCountries(data)
+    .filter(d => d.lon !== null && d.lat !== null)
     .filter(d => !state.hideSmallSamples || d.sampleCount >= 5);
+  const unmapped = aggregateCountries(data).filter(d => d.lon === null || d.lat === null);
 
   const metric = state.mapMetric;
   const values = stats.map(d => metric === "veryGoodRate" ? d[metric] * 100 : d[metric]).filter(Number.isFinite);
@@ -454,11 +472,17 @@ function updateMap(data) {
 
   mapZoomBehavior = d3.zoom()
     .scaleExtent([1, 7])
-    .on("zoom", event => g.attr("transform", event.transform));
+    .on("zoom", event => {
+      mapCurrentTransform = event.transform;
+      g.attr("transform", event.transform);
+    });
 
   svg.call(mapZoomBehavior);
+  g.attr("transform", mapCurrentTransform);
+  svg.call(mapZoomBehavior.transform, mapCurrentTransform);
 
   updateMapLegend(values, metric, color, stats);
+  updateMapStatus(unmapped);
 }
 
 function updateMapLegend(values, metric, color, stats) {
@@ -471,6 +495,22 @@ function updateMapLegend(values, metric, color, stats) {
     <span class="legend-item">${stats.length} visible countries</span>
   `;
   d3.select("#mapLegend").html(html);
+}
+
+function updateMapStatus(unmapped) {
+  if (!unmapped.length) {
+    d3.select("#mapStatus").text("");
+    return;
+  }
+
+  const sampleTotal = d3.sum(unmapped, d => d.sampleCount);
+  const names = unmapped.map(d => d.country).sort();
+  const label = names.length > 3
+    ? `${names.slice(0, 3).join(", ")} +${names.length - 3} more`
+    : names.join(", ");
+
+  d3.select("#mapStatus")
+    .text(`${sampleTotal} samples from ${unmapped.length} countries are hidden on the map because no coordinates are defined: ${label}.`);
 }
 
 function countryTooltip(d) {
